@@ -1,48 +1,42 @@
-import { fixupPluginRules } from "@eslint/compat";
+import { includeIgnoreFile } from "@eslint/compat";
 import eslint from "@eslint/js";
-import { defineConfig, includeIgnoreFile } from "eslint/config";
 import eslintPluginPrettier from "eslint-plugin-prettier/recommended";
 import eslintPluginAstro from "eslint-plugin-astro";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 import pluginReact from "eslint-plugin-react";
+import reactCompiler from "eslint-plugin-react-compiler";
 import eslintPluginReactHooks from "eslint-plugin-react-hooks";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import tseslint from "typescript-eslint";
 
-// eslint-plugin-react still uses context APIs removed in ESLint 10; wrap it until it ships native support.
-const reactPlugin = fixupPluginRules(pluginReact);
+// File path setup
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const gitignorePath = path.resolve(__dirname, ".gitignore");
 
-const gitignorePath = path.resolve(import.meta.dirname, ".gitignore");
-
-const baseConfig = defineConfig({
-  extends: [eslint.configs.recommended, tseslint.configs.strictTypeChecked, tseslint.configs.stylisticTypeChecked],
-  languageOptions: {
-    parserOptions: {
-      projectService: true,
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
+const baseConfig = tseslint.config({
+  extends: [eslint.configs.recommended, tseslint.configs.strict, tseslint.configs.stylistic],
   rules: {
     "no-console": "warn",
     "no-unused-vars": "off",
-    "@typescript-eslint/no-unused-vars": [
-      "error",
-      {
-        argsIgnorePattern: "^_",
-        varsIgnorePattern: "^_",
-        caughtErrorsIgnorePattern: "^_",
-        destructuredArrayIgnorePattern: "^_",
-        ignoreRestSiblings: true,
-      },
-    ],
-    "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
-    "@typescript-eslint/no-misused-promises": ["error", { checksVoidReturn: { attributes: false } }],
   },
 });
 
-const reactConfig = defineConfig({
+const jsxA11yConfig = tseslint.config({
   files: ["**/*.{js,jsx,ts,tsx}"],
-  extends: [eslintPluginReactHooks.configs.flat["recommended-latest"]],
-  plugins: { react: reactPlugin },
+  extends: [jsxA11y.flatConfigs.recommended],
+  languageOptions: {
+    ...jsxA11y.flatConfigs.recommended.languageOptions,
+  },
+  rules: {
+    ...jsxA11y.flatConfigs.recommended.rules,
+  },
+});
+
+const reactConfig = tseslint.config({
+  files: ["**/*.{js,jsx,ts,tsx}"],
+  extends: [pluginReact.configs.flat.recommended],
   languageOptions: {
     ...pluginReact.configs.flat.recommended.languageOptions,
     globals: {
@@ -50,41 +44,23 @@ const reactConfig = defineConfig({
       document: true,
     },
   },
+  plugins: {
+    "react-hooks": eslintPluginReactHooks,
+    "react-compiler": reactCompiler,
+  },
   settings: { react: { version: "detect" } },
   rules: {
-    ...pluginReact.configs.flat.recommended.rules,
+    ...eslintPluginReactHooks.configs.recommended.rules,
     "react/react-in-jsx-scope": "off",
+    "react-compiler/react-compiler": "error",
   },
 });
 
-const astroConfig = defineConfig({
-  files: ["**/*.astro"],
-  languageOptions: {
-    // astro-eslint-parser does not support projectService yet and warns on every file; hand it a project path instead.
-    parserOptions: { projectService: false, project: "./tsconfig.json", tsconfigRootDir: import.meta.dirname },
-  },
-  rules: {
-    "astro/no-set-html-directive": "error",
-    "astro/no-unused-css-selector": "warn",
-    "astro/prefer-class-list-directive": "warn",
-  },
-});
-
-const scriptsConfig = defineConfig({
-  files: ["scripts/**/*.mjs"],
-  extends: [tseslint.configs.disableTypeChecked],
-  languageOptions: { globals: { console: true, process: true, fetch: true, URLSearchParams: true } },
-  rules: { "no-console": "off" },
-});
-
-export default defineConfig(
-  { ignores: [".cursor/**"] },
+export default tseslint.config(
   includeIgnoreFile(gitignorePath),
   baseConfig,
+  jsxA11yConfig,
   reactConfig,
   eslintPluginAstro.configs["flat/recommended"],
-  eslintPluginAstro.configs["flat/jsx-a11y-recommended"],
-  astroConfig,
-  scriptsConfig,
-  eslintPluginPrettier,
+  eslintPluginPrettier
 );
